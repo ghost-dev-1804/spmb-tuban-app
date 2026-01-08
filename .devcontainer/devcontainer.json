@@ -1,0 +1,26 @@
+{
+  "name": "SPMB Tuban Dev Stack",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/spmb-tuban-app",
+  
+  // Fitur tambahan VS Code
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ckolkman.vscode-postgres" 
+      ]
+    }
+  },
+
+  // Forward port agar bisa diakses di browser
+  "forwardPorts": [3000, 8080, 5432],
+
+  // Jalankan perintah ini setelah container dibuat
+  "postCreateCommand": "echo 'Container siap! Silakan jalankan npm install'",
+
+  "remoteUser": "root"
+}
