@@ -1,31 +1,128 @@
 version: '3.8'
 
+# Kita buat network khusus agar semua container bisa saling panggil dengan nama
+networks:
+  spmb-net:
+    driver: bridge
+
 services:
-  # Service 1: Wadah Utama (Node, Next, Nginx, PHP CLI, WA Gateway)
+  # --- 1. MAIN DEV CONTAINER (Tempat Kamu Coding) ---
+  # VS Code akan menempel di sini.
   app:
     build: 
       context: .
       dockerfile: Dockerfile
     volumes:
-      # Menghubungkan folder repo kamu ke dalam container
       - ../:/workspaces/spmb-tuban-app:cached
-    command: sleep infinity # Agar container tetap menyala menunggu perintahmu
-    network_mode: service:db # Trik agar app bisa akses db via 'localhost'
+    # Agar container ini tidak mati meski tidak ada proses berjalan
+    command: sleep infinity
+    networks:
+      - spmb-net
+    # Kita forward port dari container tetangga agar bisa diakses di browser Codespace
+    ports:
+      - "3000:3000" # Landing Page
+      - "3001:3001" # Frontend SD
+      - "3002:3002" # Frontend SMP
+      - "4001:4001" # Backend SD
+      - "4002:4002" # Backend SMP
+      - "5000:5000" # WA Gateway
 
-  # Service 2: Database Postgres
+  # --- 2. DATABASE ---
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Script untuk membuat DB otomatis saat pertama kali jalan
       - ../init-scripts:/docker-entrypoint-initdb.d
     environment:
       POSTGRES_USER: ppdb_db
-      POSTGRES_PASSWORD: Tuban.1data # Ganti nanti di env production
-      # POSTGRES_DB default tidak perlu karena kita pakai script init
+      POSTGRES_PASSWORD: Tuban.1data
+    networks:
+      - spmb-net
     ports:
       - "5432:5432"
+
+  # --- 3. BACKEND SERVICES (Microservices) ---
+  backend-sd:
+    build: ../services/backend-sd
+    volumes:
+      - ../services/backend-sd:/app
+    # Gunakan command nodemon agar auto-restart saat kamu edit kode
+    command: sh -c "npm install && npm start" 
+    networks:
+      - spmb-net
+    environment:
+      PORT: 4001
+      # Panggil DB dengan nama servicenya 'db', bukan localhost
+      DB_HOST: db 
+      DB_USER: ppdb_db
+      DB_PASS: Tuban.1data
+      DB_NAME: spmb_sd
+    depends_on:
+      - db
+
+  backend-smp:
+    build: ../services/backend-smp
+    volumes:
+      - ../services/backend-smp:/app
+    command: sh -c "npm install && npm start"
+    networks:
+      - spmb-net
+    environment:
+      PORT: 4002
+      DB_HOST: db
+      DB_USER: ppdb_db
+      DB_PASS: Tuban.1data
+      DB_NAME: spmb_smp
+    depends_on:
+      - db
+
+  wa-gateway:
+    build: ../services/wa-gateway
+    volumes:
+      - ../services/wa-gateway:/app
+    command: sh -c "npm install && node index.js"
+    networks:
+      - spmb-net
+    ports:
+      - "5001:5000" # Mapping internal 5000 ke 5001 (opsional jika bentrok)
+
+  # --- 4. FRONTEND APPS ---
+  landing-page:
+    build: ../apps/landing-page
+    volumes:
+      - ../apps/landing-page:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev"
+    networks:
+      - spmb-net
+    environment:
+      PORT: 3000
+      WATCHPACK_POLLING: "true"
+
+  frontend-sd:
+    build: ../apps/frontend-sd
+    volumes:
+      - ../apps/frontend-sd:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- -p 3001"
+    networks:
+      - spmb-net
+    environment:
+      PORT: 3001
+      WATCHPACK_POLLING: "true"
+
+  frontend-smp:
+    build: ../apps/frontend-smp
+    volumes:
+      - ../apps/frontend-smp:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- -p 3002"
+    networks:
+      - spmb-net
+    environment:
+      PORT: 3002
+      WATCHPACK_POLLING: "true"
 
 volumes:
   postgres-data:
